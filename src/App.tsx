@@ -15,7 +15,7 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 // Use basename only in production (for GitHub Pages)
-const basename = import.meta.env.PROD ? '/FacultyApp' : '/';
+const basename = import.meta.env.PROD ? '/FacultyPortal' : '/';
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
