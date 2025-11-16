@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import logoImage from '/logo.png';
 import {
   Select,
   SelectContent,
@@ -452,7 +453,7 @@ const Dashboard = () => {
       <header className="bg-primary text-primary-foreground shadow-lg">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <img src={`${import.meta.env.BASE_URL}logo.png`} alt="IIITNR Logo" className="h-12 w-auto bg-white rounded-lg p-1" />
+            <img src={logoImage} alt="IIITNR Logo" className="h-12 w-auto bg-white rounded-lg p-1" />
             <div>
               <h1 className="text-2xl font-bold">DSPM IIITNR ATTENDANCE</h1>
               <p className="text-sm opacity-90">{facultyData.name}</p>
