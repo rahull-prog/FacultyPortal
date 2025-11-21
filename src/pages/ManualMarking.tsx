@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, Search, Users, CheckSquare, Save } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/context/AuthContext";
 
 interface Student {
   id: string;
@@ -21,31 +22,60 @@ const ManualMarking = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const fromSession = searchParams.get("fromSession") === "true";
+  const { user } = useAuth();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filterTab, setFilterTab] = useState<"all" | "present" | "absent">("all");
-  const [students, setStudents] = useState<Student[]>([
-    { id: "1", name: "Aarav Sharma", rollNumber: "2024001", present: false },
-    { id: "2", name: "Diya Patel", rollNumber: "2024002", present: false },
-    { id: "3", name: "Arjun Singh", rollNumber: "2024003", present: false },
-    { id: "4", name: "Ananya Kumar", rollNumber: "2024004", present: false },
-    { id: "5", name: "Vihaan Gupta", rollNumber: "2024005", present: false },
-    { id: "6", name: "Isha Reddy", rollNumber: "2024006", present: false },
-    { id: "7", name: "Aditya Verma", rollNumber: "2024007", present: false },
-    { id: "8", name: "Kavya Iyer", rollNumber: "2024008", present: false },
-    { id: "9", name: "Rohan Desai", rollNumber: "2024009", present: false },
-    { id: "10", name: "Saanvi Mehta", rollNumber: "2024010", present: false },
-  ]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const classData = {
-    courseCode: "CS101",
-    courseName: "Data Structures",
-    section: "A",
-    totalStudents: students.length
-  };
+  const [classData, setClassData] = useState({
+    courseCode: "",
+    courseName: "",
+    section: "",
+    totalStudents: 0
+  });
+
+  useEffect(() => {
+    const fetchStudents = async () => {
+      if (!user || !classId) return;
+
+      try {
+        const token = await user.getIdToken();
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/faculty/courses/${classId}/students`, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch students");
+        }
+
+        const data = await response.json();
+        if (data.success) {
+          const mappedStudents = data.students.map((s: any) => ({
+            id: s.id,
+            name: s.name,
+            rollNumber: s.rollNumber,
+            present: false // Default to absent initially
+          }));
+          setStudents(mappedStudents);
+          setClassData(prev => ({ ...prev, totalStudents: mappedStudents.length }));
+        }
+      } catch (error) {
+        console.error("Error fetching students:", error);
+        toast.error("Failed to load student list");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStudents();
+  }, [user, classId]);
 
   const toggleStudent = (studentId: string) => {
-    setStudents(students.map(s => 
+    setStudents(students.map(s =>
       s.id === studentId ? { ...s, present: !s.present } : s
     ));
   };
@@ -60,10 +90,12 @@ const ManualMarking = () => {
     toast.success("All selections cleared");
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    // TODO: Implement actual save to backend (likely creating attendance records)
+    // For now, we'll just show a success message as the backend endpoint for bulk attendance might not exist yet
     const presentCount = students.filter(s => s.present).length;
     toast.success(`Attendance saved: ${presentCount} students marked present`);
-    
+
     if (fromSession) {
       navigate(`/qr-session/${classId}`);
     } else {
@@ -73,14 +105,18 @@ const ManualMarking = () => {
 
   const filteredStudents = students.filter(student => {
     const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         student.rollNumber.toLowerCase().includes(searchQuery.toLowerCase());
-    
+      student.rollNumber.toLowerCase().includes(searchQuery.toLowerCase());
+
     if (filterTab === "present") return student.present && matchesSearch;
     if (filterTab === "absent") return !student.present && matchesSearch;
     return matchesSearch;
   });
 
   const presentCount = students.filter(s => s.present).length;
+
+  if (loading) {
+    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+  }
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -100,7 +136,7 @@ const ManualMarking = () => {
                 Manual Attendance
               </h1>
               <p className="text-sm text-muted-foreground">
-                {classData.courseCode} - Section {classData.section}
+                {classData.courseCode} {classData.section ? `- Section ${classData.section}` : ''}
               </p>
             </div>
           </div>
@@ -109,10 +145,10 @@ const ManualMarking = () => {
           <div className="flex gap-4">
             <Badge variant="secondary" className="text-sm">
               <Users className="w-4 h-4 mr-2" />
-              {presentCount} / {classData.totalStudents} Present
+              {presentCount} / {students.length} Present
             </Badge>
             <Badge variant="outline" className="text-sm">
-              {Math.round((presentCount / classData.totalStudents) * 100)}% Attendance
+              {students.length > 0 ? Math.round((presentCount / students.length) * 100) : 0}% Attendance
             </Badge>
           </div>
         </div>
@@ -172,9 +208,8 @@ const ManualMarking = () => {
             filteredStudents.map((student) => (
               <Card
                 key={student.id}
-                className={`p-4 transition-all cursor-pointer hover:shadow-md ${
-                  student.present ? "bg-success/5 border-success/20" : ""
-                }`}
+                className={`p-4 transition-all cursor-pointer hover:shadow-md ${student.present ? "bg-success/5 border-success/20" : ""
+                  }`}
                 onClick={() => toggleStudent(student.id)}
               >
                 <div className="flex items-center gap-4">
