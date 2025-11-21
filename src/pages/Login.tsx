@@ -5,6 +5,7 @@ import { auth } from '@/firebaseConfig';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { toast } from 'sonner';
+import logoImage from '/justlogo.png';
 
 const Login = () => {
   const [loading, setLoading] = useState(false);
@@ -43,7 +44,7 @@ const Login = () => {
       <Card className="p-8 w-full max-w-md shadow-2xl">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mx-auto mb-4">
-            <img src="/logo.png" alt="IIITNR Logo" className="h-32 w-auto" />
+            <img src={logoImage} alt="IIITNR Logo" className="h-32 w-auto" />
           </div>
           <h1 className="text-3xl font-bold">DSPM IIITNR ATTENDANCE</h1>
           <p className="text-muted-foreground mt-2">Faculty Portal</p>
@@ -75,7 +76,7 @@ const Login = () => {
             {loading ? 'Signing in...' : 'Sign in with Google'}
           </Button>
           <p className="text-xs text-center text-muted-foreground mt-4">
-            Sign in with any Google account (testing mode)
+            Sign in with Institute Email (@iiitnr.edu.in)
           </p>
         </div>
       </Card>
