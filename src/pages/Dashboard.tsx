@@ -38,7 +38,7 @@ import { useAuth } from '@/context/AuthContext';
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 import { AddClassDialog } from '@/components/AddClassDialog';
-import { listCourses, deleteCourse } from '@/services/api';
+import { listCourses, deleteCourse, generateQr } from '@/services/api';
 
 interface ClassSession {
   id: string;
@@ -226,32 +226,54 @@ const Dashboard = () => {
     }
   }, [qrActive, qrTimer]);
 
-  const generateQR = () => {
-    setQrActive(true);
-    setQrTimer(qrDuration * 60);
-    setSessionEnded(false);
-    // Generate static QR value once
-    const qrData = JSON.stringify({
-      type: 'course-attendance',
-      courseId: selectedCourse?.id,
-      timestamp: Date.now(),
-      expiresIn: qrDuration * 60
-    });
-    setCourseQRValue(qrData);
-    toast.success('QR Code generated successfully');
+  const generateQR = async () => {
+    if (!selectedCourse) {
+      toast.error('No course selected');
+      return;
+    }
+
+    try {
+      const response = await generateQr({
+        courseId: selectedCourse.id,
+        latitude: latitude ? parseFloat(latitude) : undefined,
+        longitude: longitude ? parseFloat(longitude) : undefined,
+        radius: locationRadius,
+        validitySeconds: qrDuration * 60
+      });
+
+      setQrActive(true);
+      setQrTimer(qrDuration * 60);
+      setSessionEnded(false);
+      setCourseQRValue(response.qrData);
+      toast.success('QR Code generated successfully');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to generate QR code');
+      console.error('QR generation error:', error);
+    }
   };
 
-  const regenerateQR = () => {
-    setQrTimer(qrDuration * 60);
-    // Generate new static QR value
-    const qrData = JSON.stringify({
-      type: 'course-attendance',
-      courseId: selectedCourse?.id,
-      timestamp: Date.now(),
-      expiresIn: qrDuration * 60
-    });
-    setCourseQRValue(qrData);
-    toast.success('QR Code regenerated');
+  const regenerateQR = async () => {
+    if (!selectedCourse) {
+      toast.error('No course selected');
+      return;
+    }
+
+    try {
+      const response = await generateQr({
+        courseId: selectedCourse.id,
+        latitude: latitude ? parseFloat(latitude) : undefined,
+        longitude: longitude ? parseFloat(longitude) : undefined,
+        radius: locationRadius,
+        validitySeconds: qrDuration * 60
+      });
+
+      setQrTimer(qrDuration * 60);
+      setCourseQRValue(response.qrData);
+      toast.success('QR Code regenerated');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to regenerate QR code');
+      console.error('QR regeneration error:', error);
+    }
   };
 
   const formatTime = (seconds: number) => {
@@ -432,18 +454,24 @@ const Dashboard = () => {
     setStudentList(courseStudents);
 
     // Auto-generate QR for the course
-    setTimeout(() => {
-      setQrActive(true);
-      setQrTimer(qrDuration * 60);
-      const qrData = JSON.stringify({
-        type: 'course-attendance',
-        courseId: course.id,
-        timestamp: Date.now(),
-        expiresIn: qrDuration * 60,
-        location: latitude && longitude ? { latitude, longitude, radius: locationRadius } : undefined
-      });
-      setCourseQRValue(qrData);
-      toast.success(`Session started for ${course.courseName}`);
+    setTimeout(async () => {
+      try {
+        const response = await generateQr({
+          courseId: course.id,
+          latitude: latitude ? parseFloat(latitude) : undefined,
+          longitude: longitude ? parseFloat(longitude) : undefined,
+          radius: locationRadius,
+          validitySeconds: qrDuration * 60
+        });
+
+        setQrActive(true);
+        setQrTimer(qrDuration * 60);
+        setCourseQRValue(response.qrData);
+        toast.success(`Session started for ${course.courseName}`);
+      } catch (error: any) {
+        toast.error(error.message || 'Failed to start session');
+        console.error('Session start error:', error);
+      }
     }, 100);
   };
 
