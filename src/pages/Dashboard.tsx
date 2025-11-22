@@ -89,7 +89,7 @@ const Dashboard = () => {
   const [qrActive, setQrActive] = useState(false);
   const [qrTimer, setQrTimer] = useState(300);
   const [qrDuration, setQrDuration] = useState(5);
-  const [locationRadius, setLocationRadius] = useState(100);
+  const [locationRadius, setLocationRadius] = useState(1100);
   const [searchQuery, setSearchQuery] = useState('');
   const [attendanceList, setAttendanceList] = useState<AttendedStudent[]>([]);
   const [sessionEnded, setSessionEnded] = useState(false);
@@ -980,9 +980,9 @@ const Dashboard = () => {
                           <Input
                             type="number"
                             value={locationRadius}
-                            onChange={(e) => setLocationRadius(Math.min(500, Math.max(5, parseInt((e.target as HTMLInputElement).value) || 25)))}
+                            onChange={(e) => setLocationRadius(Math.min(2000, Math.max(5, parseInt((e.target as HTMLInputElement).value) || 25)))}
                             min="5"
-                            max="500"
+                            max="2000"
                           />
                         </div>
                       </div>
@@ -1173,7 +1173,7 @@ const Dashboard = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-2">Default Location Radius (meters)</label>
-                  <Input type="number" min={5} max={500} value={locationRadius} onChange={(e) => setLocationRadius(Math.min(500, Math.max(5, parseInt((e.target as HTMLInputElement).value) || 25)))} />
+                  <Input type="number" min={5} max={2000} value={locationRadius} onChange={(e) => setLocationRadius(Math.min(2000, Math.max(5, parseInt((e.target as HTMLInputElement).value) || 25)))} />
                 </div>
               </div>
               <div className="mt-4">
