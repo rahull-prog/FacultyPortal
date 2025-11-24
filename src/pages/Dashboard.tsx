@@ -38,6 +38,7 @@ import { useAuth } from '@/context/AuthContext';
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 import { AddClassDialog } from '@/components/AddClassDialog';
+import { EnrolledStudentsList } from '@/components/EnrolledStudentsList';
 import { listCourses, deleteCourse, generateQr } from '@/services/api';
 
 interface ClassSession {
@@ -110,6 +111,7 @@ const Dashboard = () => {
   const [newContactName, setNewContactName] = useState<string>("");
   const [newContactMobile, setNewContactMobile] = useState<string>("");
   const [newContactWhatsapp, setNewContactWhatsapp] = useState<string>("");
+  const [courseTab, setCourseTab] = useState<'live' | 'students'>('live');
 
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -198,18 +200,13 @@ const Dashboard = () => {
     recentSessions: [] // Empty - will be populated from real data later
   };
 
-  const students: Student[] = [
+  const [studentList, setStudentList] = useState<Student[]>([
     { id: 1, name: 'Aarav Sharma', roll: 'CSE2021001', status: null },
     { id: 2, name: 'Ananya Patel', roll: 'CSE2021002', status: null },
     { id: 3, name: 'Arjun Singh', roll: 'CSE2021003', status: null },
     { id: 4, name: 'Diya Gupta', roll: 'CSE2021004', status: null },
     { id: 5, name: 'Ishaan Kumar', roll: 'CSE2021005', status: null },
-    { id: 6, name: 'Kavya Reddy', roll: 'CSE2021006', status: null },
-    { id: 7, name: 'Rohan Verma', roll: 'CSE2021007', status: null },
-    { id: 8, name: 'Sanya Desai', roll: 'CSE2021008', status: null },
-  ];
-
-  const [studentList, setStudentList] = useState<Student[]>(students);
+  ]);
 
   useEffect(() => {
     if (qrActive && qrTimer > 0) {
@@ -953,212 +950,321 @@ const Dashboard = () => {
               </div>
             </Card>
 
-            <div className="grid lg:grid-cols-3 gap-6">
-              {/* QR Code Section */}
-              <div className="lg:col-span-2">
-                <Card className="p-6">
-                  <h3 className="text-xl font-bold mb-6">QR Code Attendance</h3>
-
-                  {!qrActive && !sessionEnded && (
-                    <div className="space-y-6">
-                      <div className="grid md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium mb-2">
-                            QR Validity (minutes)
-                          </label>
-                          <Input
-                            type="number"
-                            value={qrDuration}
-                            onChange={(e) => setQrDuration(Math.max(1, parseInt((e.target as HTMLInputElement).value) || 1))}
-                            min="1"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium mb-2">
-                            Location Radius (meters)
-                          </label>
-                          <Input
-                            type="number"
-                            value={locationRadius}
-                            onChange={(e) => setLocationRadius(Math.min(2000, Math.max(5, parseInt((e.target as HTMLInputElement).value) || 25)))}
-                            min="5"
-                            max="2000"
-                          />
-                        </div>
-                      </div>
-
-                      <Button
-                        onClick={generateQR}
-                        className="w-full flex items-center justify-center gap-2"
-                        size="lg"
-                      >
-                        <QrCode size={24} />
-                        Generate QR Code
-                      </Button>
-                    </div>
-                  )}
-
-                  {qrActive && (
-                    <div className="space-y-6">
-                      <div className="bg-muted/50 rounded-lg p-8 text-center">
-                        <div className="bg-white w-64 h-64 mx-auto rounded-lg shadow-lg flex items-center justify-center mb-4">
-                          <QRCodeSVG
-                            value={courseQRValue || 'waiting...'}
-                            size={240}
-                            level="H"
-                          />
-                        </div>
-                        <div className="text-3xl font-bold text-primary mb-2">
-                          {formatTime(qrTimer)}
-                        </div>
-                        <div className="w-full bg-muted rounded-full h-2 mb-4">
-                          <div
-                            className="bg-primary h-2 rounded-full transition-all"
-                            style={{ width: `${(qrTimer / (qrDuration * 60)) * 100}%` }}
-                          />
-                        </div>
-                        <p className="text-muted-foreground">Time remaining</p>
-                        <p className="text-sm text-muted-foreground mt-2">Range: {locationRadius}m</p>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <Button
-                          onClick={regenerateQR}
-                          variant="secondary"
-                        >
-                          Regenerate QR
-                        </Button>
-                        <Button
-                          onClick={endSession}
-                          variant="destructive"
-                        >
-                          End Session
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  {sessionEnded && (
-                    <div className="space-y-6">
-                      <div className="bg-green-50 dark:bg-green-950 border-2 border-green-200 dark:border-green-800 rounded-lg p-6">
-                        <div className="flex items-center gap-3 mb-4">
-                          <BarChart3 className="text-green-600" size={32} />
-                          <h4 className="text-2xl font-bold">Session Statistics</h4>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-4 mt-6">
-                          <Card className="p-4 text-center">
-                            <div className="text-3xl font-bold text-primary">{selectedCourse.totalStudents}</div>
-                            <div className="text-sm text-muted-foreground mt-1">Total Students</div>
-                          </Card>
-                          <Card className="p-4 text-center">
-                            <div className="text-3xl font-bold text-green-600">{presentCount}</div>
-                            <div className="text-sm text-muted-foreground mt-1">Present</div>
-                          </Card>
-                          <Card className="p-4 text-center">
-                            <div className="text-3xl font-bold text-red-600">{absentCount}</div>
-                            <div className="text-sm text-muted-foreground mt-1">Absent</div>
-                          </Card>
-                        </div>
-
-                        <div className="mt-4">
-                          <div className="w-full bg-muted rounded-full h-4">
-                            <div
-                              className="bg-green-600 h-4 rounded-full"
-                              style={{ width: `${(presentCount / selectedCourse.totalStudents) * 100}%` }}
-                            />
-                          </div>
-                          <p className="text-center mt-2 text-muted-foreground">
-                            {((presentCount / selectedCourse.totalStudents) * 100).toFixed(1)}% Attendance
-                          </p>
-                        </div>
-                      </div>
-
-                      <Button
-                        onClick={() => {
-                          setSessionEnded(false);
-                          setStudentList(students);
-                          setAttendanceList([]);
-                        }}
-                        className="w-full"
-                      >
-                        Start New Session
-                      </Button>
-                    </div>
-                  )}
-
-                  {/* Manual Search */}
-                  <div className="mt-8 pt-8 border-t">
-                    <h4 className="text-lg font-bold mb-4">Manual Attendance</h4>
-                    <div className="relative mb-4">
-                      <Search className="absolute left-3 top-3 text-muted-foreground" size={20} />
-                      <Input
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery((e.target as HTMLInputElement).value)}
-                        placeholder="Search by name or roll number..."
-                        className="pl-10"
-                      />
-                    </div>
-
-                    {searchQuery && (
-                      <div className="space-y-2 max-h-64 overflow-y-auto">
-                        {filteredStudents.map(student => (
-                          <div key={student.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                            <div>
-                              <p className="font-semibold">{student.name}</p>
-                              <p className="text-sm text-muted-foreground">{student.roll}</p>
-                            </div>
-                            <div className="flex gap-2">
-                              <Button
-                                onClick={() => handleStudentSearch(student, 'present')}
-                                variant={student.status === 'present' ? 'default' : 'outline'}
-                                size="sm"
-                              >
-                                Present
-                              </Button>
-                              <Button
-                                onClick={() => handleStudentSearch(student, 'absent')}
-                                variant={student.status === 'absent' ? 'destructive' : 'outline'}
-                                size="sm"
-                              >
-                                Absent
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </Card>
-              </div>
-
-              {/* Live Attendance List */}
-              <div>
-                <Card className="p-6">
-                  <h3 className="text-xl font-bold mb-4">Live Attendance</h3>
-                  <div className="space-y-3">
-                    {attendanceList.length === 0 ? (
-                      <div className="text-center py-12 text-muted-foreground">
-                        <Users size={48} className="mx-auto mb-4" />
-                        <p>No students marked present yet</p>
-                      </div>
-                    ) : (
-                      attendanceList.map(student => (
-                        <div key={student.id} className="flex items-start gap-3 p-3 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
-                          <CheckCircle className="text-green-600 mt-1" size={20} />
-                          <div className="flex-1">
-                            <p className="font-semibold">{student.name}</p>
-                            <p className="text-xs text-muted-foreground">{student.roll}</p>
-                            <p className="text-xs text-green-600 mt-1">{student.time}</p>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </Card>
+            {/* Tab Navigation */}
+            <div className="border-b border-border">
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setCourseTab('live')}
+                  className={`px-6 py-3 font-medium transition-colors ${courseTab === 'live'
+                    ? 'text-primary border-b-2 border-primary'
+                    : 'text-muted-foreground hover:text-primary'
+                    }`}
+                >
+                  Live Attendance
+                </button>
+                <button
+                  onClick={() => setCourseTab('students')}
+                  className={`px-6 py-3 font-medium transition-colors ${courseTab === 'students'
+                    ? 'text-primary border-b-2 border-primary'
+                    : 'text-muted-foreground hover:text-primary'
+                    }`}
+                >
+                  Students
+                </button>
               </div>
             </div>
+
+            {courseTab === 'live' && (
+              <div className="grid lg:grid-cols-3 gap-6">
+                {/* QR Code Section */}
+                <div className="lg:col-span-2">
+                  <Card className="p-6">
+                    <h3 className="text-xl font-bold mb-6">QR Code Attendance</h3>
+
+                    {!qrActive && !sessionEnded && (
+                      <div className="space-y-6">
+                        <div className="grid md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium mb-2">
+                              QR Validity (minutes)
+                            </label>
+                            <Input
+                              type="number"
+                              value={qrDuration}
+                              onChange={(e) => setQrDuration(Math.max(1, parseInt((e.target as HTMLInputElement).value) || 1))}
+                              min="1"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-2">
+                              Location Radius (meters)
+                            </label>
+                            <Input
+                              type="number"
+                              value={locationRadius}
+                              onChange={(e) => setLocationRadius(Math.min(2000, Math.max(5, parseInt((e.target as HTMLInputElement).value) || 25)))}
+                              min="5"
+                              max="2000"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Location Selection */}
+                        <div>
+                          <label className="block text-sm font-medium mb-2">
+                            Location (optional)
+                          </label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <Input
+                              placeholder="Latitude"
+                              value={latitude}
+                              onChange={(e) => setLatitude((e.target as HTMLInputElement).value)}
+                            />
+                            <Input
+                              placeholder="Longitude"
+                              value={longitude}
+                              onChange={(e) => setLongitude((e.target as HTMLInputElement).value)}
+                            />
+                          </div>
+                          <Button
+                            variant="outline"
+                            className="mt-2 w-full"
+                            onClick={useCurrentLocation}
+                          >
+                            <MapPin className="w-4 h-4 mr-2" />
+                            Use Current Location
+                          </Button>
+                        </div>
+
+                        <Button
+                          onClick={generateQR}
+                          className="w-full flex items-center justify-center gap-2"
+                          size="lg"
+                        >
+                          <QrCode size={24} />
+                          Generate QR Code
+                        </Button>
+                      </div>
+                    )}
+
+                    {qrActive && (
+                      <div className="space-y-6">
+                        <div className="bg-muted/50 rounded-lg p-8 text-center">
+                          <div className="bg-white w-64 h-64 mx-auto rounded-lg shadow-lg flex items-center justify-center mb-4">
+                            <QRCodeSVG
+                              value={courseQRValue || 'waiting...'}
+                              size={240}
+                              level="H"
+                            />
+                          </div>
+                          <div className="text-3xl font-bold text-primary mb-2">
+                            {formatTime(qrTimer)}
+                          </div>
+                          <div className="w-full bg-muted rounded-full h-2 mb-4">
+                            <div
+                              className="bg-primary h-2 rounded-full transition-all"
+                              style={{ width: `${(qrTimer / (qrDuration * 60)) * 100}%` }}
+                            />
+                          </div>
+                          <p className="text-muted-foreground">Time remaining</p>
+                          <p className="text-sm text-muted-foreground mt-2">Range: {locationRadius}m</p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <Button
+                            onClick={regenerateQR}
+                            variant="secondary"
+                          >
+                            Regenerate QR
+                          </Button>
+                          <Button
+                            onClick={endSession}
+                            variant="destructive"
+                          >
+                            End Session
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {sessionEnded && (
+                      <div className="space-y-6">
+                        <div className="bg-green-50 dark:bg-green-950 border-2 border-green-200 dark:border-green-800 rounded-lg p-6">
+                          <div className="flex items-center gap-3 mb-4">
+                            <BarChart3 className="text-green-600" size={32} />
+                            <h4 className="text-2xl font-bold">Session Statistics</h4>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-4 mt-6">
+                            <Card className="p-4 text-center">
+                              <div className="text-3xl font-bold text-primary">{selectedCourse.totalStudents}</div>
+                              <div className="text-sm text-muted-foreground mt-1">Total Students</div>
+                            </Card>
+                            <Card className="p-4 text-center">
+                              <div className="text-3xl font-bold text-green-600">{presentCount}</div>
+                              <div className="text-sm text-muted-foreground mt-1">Present</div>
+                            </Card>
+                            <Card className="p-4 text-center">
+                              <div className="text-3xl font-bold text-red-600">{absentCount}</div>
+                              <div className="text-sm text-muted-foreground mt-1">Absent</div>
+                            </Card>
+                          </div>
+
+                          <div className="mt-4">
+                            <div className="w-full bg-muted rounded-full h-4">
+                              <div
+                                className="bg-green-600 h-4 rounded-full"
+                                style={{ width: `${(presentCount / selectedCourse.totalStudents) * 100}%` }}
+                              />
+                            </div>
+                            <p className="text-center mt-2 text-muted-foreground">
+                              {((presentCount / selectedCourse.totalStudents) * 100).toFixed(1)}% Attendance
+                            </p>
+                          </div>
+                        </div>
+
+                        <Button
+                          onClick={() => {
+                            setSessionEnded(false);
+                            setStudentList(students);
+                            setAttendanceList([]);
+                          }}
+                          className="w-full"
+                        >
+                          Start New Session
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Manual Search */}
+                    <div className="mt-8 pt-8 border-t">
+                      <h4 className="text-lg font-bold mb-4">Manual Attendance</h4>
+                      <div className="relative mb-4">
+                        <Search className="absolute left-3 top-3 text-muted-foreground" size={20} />
+                        <Input
+                          type="text"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery((e.target as HTMLInputElement).value)}
+                          placeholder="Search by name or roll number..."
+                          className="pl-10"
+                        />
+                      </div>
+
+                      {searchQuery && (
+                        <div className="space-y-2 max-h-64 overflow-y-auto">
+                          {filteredStudents.map(student => (
+                            <div key={student.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                              <div>
+                                <p className="font-semibold">{student.name}</p>
+                                <p className="text-sm text-muted-foreground">{student.roll}</p>
+                              </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  onClick={() => handleStudentSearch(student, 'present')}
+                                  variant={student.status === 'present' ? 'default' : 'outline'}
+                                  size="sm"
+                                >
+                                  Present
+                                </Button>
+                                <Button
+                                  onClick={() => handleStudentSearch(student, 'absent')}
+                                  variant={student.status === 'absent' ? 'destructive' : 'outline'}
+                                  size="sm"
+                                >
+                                  Absent
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+                </div>
+
+                {/* Live Attendance List */}
+                <div>
+                  <Card className="p-6">
+                    <h3 className="text-xl font-bold mb-4">Live Attendance</h3>
+                    <div className="space-y-3">
+                      {attendanceList.length === 0 ? (
+                        <div className="text-center py-12 text-muted-foreground">
+                          <Users size={48} className="mx-auto mb-4" />
+                          <p>No students marked present yet</p>
+                        </div>
+                      ) : (
+                        attendanceList.map(student => (
+                          <div key={student.id} className="flex items-start gap-3 p-3 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
+                            <CheckCircle className="text-green-600 mt-1" size={20} />
+                            <div className="flex-1">
+                              <p className="font-semibold">{student.name}</p>
+                              <p className="text-xs text-muted-foreground">{student.roll}</p>
+                              <p className="text-xs text-green-600 mt-1">{student.time}</p>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </Card>
+                </div>
+              </div>
+            )}
+
+            {/* Students Tab */}
+            {courseTab === 'students' && (
+              <div className="space-y-6">
+                <Card className="p-6">
+                  <h3 className="text-xl font-bold mb-6">Manual Attendance</h3>
+                  <div className="relative mb-4">
+                    <Search className="absolute left-3 top-3 text-muted-foreground" size={20} />
+                    <Input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery((e.target as HTMLInputElement).value)}
+                      placeholder="Search by name or roll number..."
+                      className="pl-10"
+                    />
+                  </div>
+
+                  {searchQuery && (
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                      {filteredStudents.map(student => (
+                        <div key={student.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                          <div>
+                            <p className="font-semibold">{student.name}</p>
+                            <p className="text-sm text-muted-foreground">{student.roll}</p>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={() => handleStudentSearch(student, 'present')}
+                              variant={student.status === 'present' ? 'default' : 'outline'}
+                              size="sm"
+                            >
+                              <CheckCircle className="w-4 h-4 mr-1" />
+                              Present
+                            </Button>
+                            <Button
+                              onClick={() => handleStudentSearch(student, 'absent')}
+                              variant={student.status === 'absent' ? 'destructive' : 'outline'}
+                              size="sm"
+                            >
+                              <XCircle className="w-4 h-4 mr-1" />
+                              Absent
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+
+                {/* Enrolled Students List Component */}
+                <EnrolledStudentsList
+                  students={studentList}
+                  totalStudents={selectedCourse.totalStudents}
+                />
+              </div>
+            )}
           </div>
         )}
 
