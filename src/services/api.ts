@@ -67,9 +67,13 @@ export async function listCourseStudents(courseId: string, sessionId?: string) {
   return request(`/api/faculty/course/${courseId}/students${q}`, { method: 'GET' });
 }
 
-export async function saveManualAttendance(sessionId: string, presentStudentIds: string[]) {
+export async function refreshQr(sessionId: string) {
+  return request('/api/faculty/refresh-qr', { method: 'POST', body: JSON.stringify({ sessionId }) });
+}
+
+export async function saveManualAttendance(sessionId: string, studentId: string, status: 'present' | 'absent') {
   return request(`/api/faculty/session/${sessionId}/manual-attendance`, {
     method: 'POST',
-    body: JSON.stringify({ presentStudentIds })
+    body: JSON.stringify({ studentId, status })
   });
 }

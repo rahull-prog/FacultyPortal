@@ -64,13 +64,15 @@ export function useAttendance(selectedCourseId: string | null, qrActive: boolean
     const fetchLiveAttendance = async (sessionId: string) => {
         try {
             const data = await getSessionAttendance(sessionId);
-            const attended = (data.attendees || []).map((a: any) => ({
-                id: a.studentId,
-                name: a.studentName,
-                roll: a.rollNo,
-                time: new Date(a.markedAt?.toDate?.() || a.markedAt).toLocaleTimeString(),
-                status: 'present' as const
-            }));
+            const attended = (data.attendees || [])
+                .filter((a: any) => a.status === 'present')
+                .map((a: any) => ({
+                    id: a.studentId,
+                    name: a.studentName,
+                    roll: a.rollNo,
+                    time: new Date(a.markedAt?.toDate?.() || a.markedAt).toLocaleTimeString(),
+                    status: 'present' as const
+                }));
             setLiveAttendanceList(attended);
 
             // Update studentList status based on live attendance

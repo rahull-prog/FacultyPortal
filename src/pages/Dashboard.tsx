@@ -39,7 +39,8 @@ import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 import { AddClassDialog } from '@/components/AddClassDialog';
 import { EnrolledStudentsList } from '@/components/EnrolledStudentsList';
-import { listCourses, deleteCourse, generateQr, getSessionAttendance, listCourseStudents } from '@/services/api';
+import { SettingsTab } from '@/components/SettingsTab';
+import { listCourses, deleteCourse, generateQr, getSessionAttendance, listCourseStudents, refreshQr, saveManualAttendance, stopSession } from '@/services/api';
 import { useAttendance } from '@/hooks/useAttendance';
 
 interface ClassSession {
@@ -97,6 +98,11 @@ const Dashboard = () => {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [sessionEnded, setSessionEnded] = useState(false);
   const [now, setNow] = useState<Date>(new Date());
+  const [qrVersion, setQrVersion] = useState(1);
+  const [qrRefreshCountdown, setQrRefreshCountdown] = useState(10);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState(10);
+  const [sessionTimeRemaining, setSessionTimeRemaining] = useState(3600);
 
   // Home quick session controls
   const [classQuery, setClassQuery] = useState("");
@@ -209,20 +215,42 @@ const Dashboard = () => {
     currentSessionId
   );
 
+  // Auto-refresh QR and Session Timer
+  // Auto-refresh QR and Session Timer
   useEffect(() => {
-    if (qrActive && qrTimer > 0) {
-      const timer = setInterval(() => {
-        setQrTimer(prev => {
+    if (qrActive) {
+      const interval = setInterval(() => {
+        // Session Timer
+        setSessionTimeRemaining(prev => {
           if (prev <= 1) {
-            setQrActive(false);
+            endSession();
             return 0;
           }
           return prev - 1;
         });
+
+        // QR Refresh Countdown
+        if (autoRefreshEnabled) {
+          setQrRefreshCountdown(prev => {
+            if (prev <= 1) {
+              // Trigger refresh
+              if (currentSessionId) {
+                refreshQr(currentSessionId).then(res => {
+                  if (res.success) {
+                    setCourseQRValue(res.qrData);
+                    setQrVersion(res.qrVersion);
+                  }
+                }).catch(console.error);
+              }
+              return autoRefreshInterval;
+            }
+            return prev - 1;
+          });
+        }
       }, 1000);
-      return () => clearInterval(timer);
+      return () => clearInterval(interval);
     }
-  }, [qrActive, qrTimer]);
+  }, [qrActive, currentSessionId, autoRefreshEnabled, autoRefreshInterval]);
 
   const generateQR = async () => {
     if (!selectedCourse) {
@@ -231,21 +259,36 @@ const Dashboard = () => {
     }
 
     try {
+      // Determine class type based on timetable or default
+      let classType = 'Theory';
+      if (selectedCourse.timetable && Array.isArray(selectedCourse.timetable)) {
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const today = days[new Date().getDay()];
+        const slot = selectedCourse.timetable.find(t => t.day === today);
+        if (slot && slot.type) {
+          classType = slot.type.charAt(0).toUpperCase() + slot.type.slice(1);
+        }
+      }
+
       const response = await generateQr({
         courseId: selectedCourse.id,
         latitude: latitude ? parseFloat(latitude) : undefined,
         longitude: longitude ? parseFloat(longitude) : undefined,
         radius: locationRadius,
-        validitySeconds: qrDuration * 60
+        validitySeconds: autoRefreshEnabled ? autoRefreshInterval : 300,
+        classType
       });
 
       setQrActive(true);
-      setQrTimer(qrDuration * 60);
+      setQrTimer(qrDuration * 60); // Legacy
+      setSessionTimeRemaining(qrDuration * 60);
+      setQrRefreshCountdown(autoRefreshInterval);
+      setQrVersion(1);
       setSessionEnded(false);
       setCourseQRValue(response.qrData);
-      setCurrentSessionId(response.sessionId); // Store session ID for live attendance
-      setLiveAttendanceList([]); // Reset live attendance list
-      toast.success('QR Code generated successfully');
+      setCurrentSessionId(response.sessionId);
+      setLiveAttendanceList([]);
+      toast.success(`Session started (${classType})! QR will refresh every 5 seconds.`);
     } catch (error: any) {
       toast.error(error.message || 'Failed to generate QR code');
       console.error('QR generation error:', error);
@@ -277,31 +320,36 @@ const Dashboard = () => {
     }
   };
 
+  const handleManualMark = async (studentId: string, status: 'present' | 'absent') => {
+    if (!currentSessionId) return;
+    try {
+      await saveManualAttendance(currentSessionId, studentId, status);
+      toast.success(`Student marked ${status}`);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to mark attendance');
+    }
+  };
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleStudentSearch = (student: Student, status: 'present' | 'absent') => {
-    const updated = studentList.map(s =>
-      s.id === student.id ? { ...s, status } : s
-    );
-    setStudentList(updated);
 
-    if (status === 'present' && !attendanceList.find(a => a.id === student.id)) {
-      setAttendanceList([...attendanceList, { ...student, time: new Date().toLocaleTimeString() }]);
-      toast.success(`${student.name} marked present`);
-    } else if (status === 'absent') {
-      setAttendanceList(attendanceList.filter(a => a.id !== student.id));
-      toast.success(`${student.name} marked absent`);
-    }
-  };
 
-  const endSession = () => {
+  const endSession = async () => {
     setQrActive(false);
     setSessionEnded(true);
-    toast.success('Session ended successfully');
+    if (currentSessionId) {
+      try {
+        await stopSession(currentSessionId);
+        toast.success('Session ended successfully');
+      } catch (e) {
+        console.error("Failed to stop session", e);
+        toast.error("Failed to sync session end with server");
+      }
+    }
   };
 
   const filteredStudents = studentList.filter(s =>
@@ -328,7 +376,7 @@ const Dashboard = () => {
         name: s.name,
         roll: s.rollNumber,
         status: null as 'present' | 'absent' | null
-      })) || students;
+      })) || [];
       setStudentList(courseStudents);
     } else {
       toast.error('Course not found for this slot');
@@ -451,7 +499,7 @@ const Dashboard = () => {
       name: s.name,
       roll: s.rollNumber,
       status: null as 'present' | 'absent' | null
-    })) || students;
+    })) || [];
     setStudentList(courseStudents);
 
     // Auto-generate QR for the course
@@ -1040,6 +1088,33 @@ const Dashboard = () => {
                           </Button>
                         </div>
 
+                        {/* Auto-Refresh Settings */}
+                        <div className="mb-4 p-3 bg-muted/50 rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="text-sm font-medium flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={autoRefreshEnabled}
+                                onChange={e => setAutoRefreshEnabled(e.target.checked)}
+                                className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                              />
+                              Auto-refresh QR
+                            </label>
+                          </div>
+                          {autoRefreshEnabled && (
+                            <div className="flex items-center gap-2">
+                              <label className="text-xs text-muted-foreground w-24">Interval (sec):</label>
+                              <Input
+                                type="number"
+                                value={autoRefreshInterval}
+                                onChange={e => setAutoRefreshInterval(Math.max(5, parseInt(e.target.value) || 10))}
+                                className="h-8"
+                                min={5}
+                              />
+                            </div>
+                          )}
+                        </div>
+
                         <Button
                           onClick={generateQR}
                           className="w-full flex items-center justify-center gap-2"
@@ -1062,15 +1137,21 @@ const Dashboard = () => {
                             />
                           </div>
                           <div className="text-3xl font-bold text-primary mb-2">
-                            {formatTime(qrTimer)}
+                            {formatTime(sessionTimeRemaining)}
                           </div>
                           <div className="w-full bg-muted rounded-full h-2 mb-4">
                             <div
                               className="bg-primary h-2 rounded-full transition-all"
-                              style={{ width: `${(qrTimer / (qrDuration * 60)) * 100}%` }}
+                              style={{ width: `${(sessionTimeRemaining / (qrDuration * 60)) * 100}%` }}
                             />
                           </div>
-                          <p className="text-muted-foreground">Time remaining</p>
+                          <p className="text-muted-foreground">Session Time Remaining</p>
+
+                          <div className="mt-4 flex items-center justify-center gap-4 text-sm">
+                            <Badge variant="outline">QR v{qrVersion}</Badge>
+                            <span className="text-muted-foreground">Refreshing in {qrRefreshCountdown}s</span>
+                          </div>
+
                           <p className="text-sm text-muted-foreground mt-2">Range: {locationRadius}m</p>
                         </div>
 
@@ -1078,8 +1159,9 @@ const Dashboard = () => {
                           <Button
                             onClick={regenerateQR}
                             variant="secondary"
+                            disabled={true}
                           >
-                            Regenerate QR
+                            Auto-Refreshing
                           </Button>
                           <Button
                             onClick={endSession}
@@ -1130,7 +1212,13 @@ const Dashboard = () => {
                         <Button
                           onClick={() => {
                             setSessionEnded(false);
-                            setStudentList(students);
+                            const courseStudents = selectedCourse.students?.map(s => ({
+                              id: s.id,
+                              name: s.name,
+                              roll: s.rollNumber,
+                              status: null as 'present' | 'absent' | null
+                            })) || [];
+                            setStudentList(courseStudents);
                             setAttendanceList([]);
                           }}
                           className="w-full"
@@ -1156,30 +1244,39 @@ const Dashboard = () => {
 
                       {searchQuery && (
                         <div className="space-y-2 max-h-64 overflow-y-auto">
-                          {filteredStudents.map(student => (
-                            <div key={student.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                              <div>
-                                <p className="font-semibold">{student.name}</p>
-                                <p className="text-sm text-muted-foreground">{student.roll}</p>
+                          {filteredStudents.map(student => {
+                            const isPresent = liveAttendanceList.some(a => String(a.id) === String(student.id) && a.status === 'present');
+
+                            return (
+                              <div key={student.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                                <div>
+                                  <p className="font-semibold">{student.name}</p>
+                                  <p className="text-sm text-muted-foreground">{student.roll}</p>
+                                </div>
+                                <div className="flex gap-2">
+                                  <Button
+                                    onClick={() => handleManualMark(String(student.id), 'present')}
+                                    variant={isPresent ? 'outline' : 'default'}
+                                    size="sm"
+                                    className={isPresent ? "bg-green-100 text-green-800 hover:bg-green-200" : ""}
+                                    disabled={isPresent}
+                                  >
+                                    {isPresent ? <CheckCircle className="w-4 h-4 mr-1" /> : "Mark Present"}
+                                  </Button>
+                                  {isPresent && (
+                                    <Button
+                                      onClick={() => handleManualMark(String(student.id), 'absent')}
+                                      variant="ghost"
+                                      size="sm"
+                                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    >
+                                      Mark Absent
+                                    </Button>
+                                  )}
+                                </div>
                               </div>
-                              <div className="flex gap-2">
-                                <Button
-                                  onClick={() => handleStudentSearch(student, 'present')}
-                                  variant={student.status === 'present' ? 'default' : 'outline'}
-                                  size="sm"
-                                >
-                                  Present
-                                </Button>
-                                <Button
-                                  onClick={() => handleStudentSearch(student, 'absent')}
-                                  variant={student.status === 'absent' ? 'destructive' : 'outline'}
-                                  size="sm"
-                                >
-                                  Absent
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -1232,32 +1329,40 @@ const Dashboard = () => {
 
                   {searchQuery && (
                     <div className="space-y-2 max-h-96 overflow-y-auto">
-                      {filteredStudents.map(student => (
-                        <div key={student.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                          <div>
-                            <p className="font-semibold">{student.name}</p>
-                            <p className="text-sm text-muted-foreground">{student.roll}</p>
+                      {filteredStudents.map(student => {
+                        const isPresent = liveAttendanceList.some(a => String(a.id) === String(student.id) && a.status === 'present');
+                        return (
+                          <div key={student.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                            <div>
+                              <p className="font-semibold">{student.name}</p>
+                              <p className="text-sm text-muted-foreground">{student.roll}</p>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={() => handleManualMark(String(student.id), 'present')}
+                                variant={isPresent ? 'outline' : 'default'}
+                                size="sm"
+                                className={isPresent ? "bg-green-100 text-green-800" : ""}
+                                disabled={isPresent}
+                              >
+                                <CheckCircle className="w-4 h-4 mr-1" />
+                                Present
+                              </Button>
+                              {isPresent && (
+                                <Button
+                                  onClick={() => handleManualMark(String(student.id), 'absent')}
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-red-600 hover:bg-red-50"
+                                >
+                                  <XCircle className="w-4 h-4 mr-1" />
+                                  Absent
+                                </Button>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex gap-2">
-                            <Button
-                              onClick={() => handleStudentSearch(student, 'present')}
-                              variant={student.status === 'present' ? 'default' : 'outline'}
-                              size="sm"
-                            >
-                              <CheckCircle className="w-4 h-4 mr-1" />
-                              Present
-                            </Button>
-                            <Button
-                              onClick={() => handleStudentSearch(student, 'absent')}
-                              variant={student.status === 'absent' ? 'destructive' : 'outline'}
-                              size="sm"
-                            >
-                              <XCircle className="w-4 h-4 mr-1" />
-                              Absent
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
                 </Card>
@@ -1273,117 +1378,12 @@ const Dashboard = () => {
         )}
 
         {activeTab === 'settings' && !selectedCourse && (
-          <div className="space-y-6">
-            <Card className="p-6">
-              <h2 className="text-2xl font-bold mb-4">Settings</h2>
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2">Default QR Validity (minutes)</label>
-                  <Input type="number" min={1} value={qrDuration} onChange={(e) => setQrDuration(Math.max(1, parseInt((e.target as HTMLInputElement).value) || 1))} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Default Location Radius (meters)</label>
-                  <Input type="number" min={5} max={2000} value={locationRadius} onChange={(e) => setLocationRadius(Math.min(2000, Math.max(5, parseInt((e.target as HTMLInputElement).value) || 25)))} />
-                </div>
-              </div>
-              <div className="mt-4">
-                <Button onClick={() => toast.success('Settings saved')}>Save Changes</Button>
-              </div>
-            </Card>
-
-            <Card className="p-6">
-              <h2 className="text-2xl font-bold mb-4">Contact Info for Students</h2>
-              <p className="text-sm text-muted-foreground mb-4">Add contact persons (Faculty/TA) for students to reach</p>
-
-              {/* List of existing contacts */}
-              {contactPersons.length > 0 && (
-                <div className="space-y-3 mb-6">
-                  {contactPersons.map((contact) => (
-                    <div key={contact.id} className="p-4 bg-muted/50 rounded-lg border">
-                      <div className="flex justify-between items-start mb-2">
-                        <h3 className="font-semibold text-lg">{contact.name}</h3>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setContactPersons(contactPersons.filter(c => c.id !== contact.id))}
-                        >
-                          <XCircle size={18} />
-                        </Button>
-                      </div>
-                      <div className="grid md:grid-cols-2 gap-2 text-sm">
-                        <div>
-                          <span className="text-muted-foreground">Mobile:</span>
-                          <span className="ml-2 font-medium">{contact.mobile}</span>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">WhatsApp:</span>
-                          <span className="ml-2 font-medium">{contact.whatsapp}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Add new contact form */}
-              <div className="space-y-4 p-4 bg-primary/5 rounded-lg border border-primary/20">
-                <h3 className="font-semibold">Add New Contact</h3>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Person's Name</label>
-                  <Input
-                    type="text"
-                    placeholder="Enter name"
-                    value={newContactName}
-                    onChange={(e) => setNewContactName(e.target.value)}
-                  />
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Mobile Number</label>
-                    <Input
-                      type="tel"
-                      placeholder="+91 XXXXX XXXXX"
-                      value={newContactMobile}
-                      onChange={(e) => setNewContactMobile(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">WhatsApp Number</label>
-                    <Input
-                      type="tel"
-                      placeholder="+91 XXXXX XXXXX"
-                      value={newContactWhatsapp}
-                      onChange={(e) => setNewContactWhatsapp(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <Button
-                  onClick={() => {
-                    if (newContactName && newContactMobile && newContactWhatsapp) {
-                      setContactPersons([...contactPersons, {
-                        id: Date.now().toString(),
-                        name: newContactName,
-                        mobile: newContactMobile,
-                        whatsapp: newContactWhatsapp
-                      }]);
-                      setNewContactName('');
-                      setNewContactMobile('');
-                      setNewContactWhatsapp('');
-                      toast.success('Contact added successfully');
-                    } else {
-                      toast.error('Please fill all fields');
-                    }
-                  }}
-                  className="w-full"
-                >
-                  <Plus size={18} className="mr-2" />
-                  Add Contact
-                </Button>
-              </div>
-            </Card>
-          </div>
+          <SettingsTab
+            qrDuration={qrDuration}
+            setQrDuration={setQrDuration}
+            locationRadius={locationRadius}
+            setLocationRadius={setLocationRadius}
+          />
         )}
       </main>
 
