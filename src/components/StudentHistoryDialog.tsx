@@ -60,6 +60,7 @@ export const StudentHistoryDialog = ({ open, onOpenChange, student, sessions }: 
                             <thead className="bg-muted/50 sticky top-0">
                                 <tr>
                                     <th className="text-left py-2 px-3 font-medium">Date</th>
+                                    <th className="text-left py-2 px-3 font-medium">Day</th>
                                     <th className="text-left py-2 px-3 font-medium">Type</th>
                                     <th className="text-left py-2 px-3 font-medium">Time</th>
                                     <th className="text-center py-2 px-3 font-medium">Status</th>
@@ -76,6 +77,9 @@ export const StudentHistoryDialog = ({ open, onOpenChange, student, sessions }: 
                                                 {format(date, 'MMM d, yyyy')}
                                             </td>
                                             <td className="py-3 px-3">
+                                                {format(date, 'EEEE')}
+                                            </td>
+                                            <td className="py-3 px-3">
                                                 <Badge variant="outline" className="capitalize">
                                                     {session.type || 'Theory'}
                                                 </Badge>
@@ -85,8 +89,8 @@ export const StudentHistoryDialog = ({ open, onOpenChange, student, sessions }: 
                                             </td>
                                             <td className="py-3 px-3 text-center">
                                                 <div className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${status === 'present'
-                                                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                                                        : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                                    : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
                                                     }`}>
                                                     {status === 'present' ? (
                                                         <>

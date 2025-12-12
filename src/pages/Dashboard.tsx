@@ -460,17 +460,31 @@ const Dashboard = () => {
 
   const useCurrentLocation = async () => {
     if (!('geolocation' in navigator)) {
-      toast.error('Geolocation not supported');
+      toast.error('Geolocation not supported on this device');
       return;
     }
+
+    toast.message('Fetching location...', { description: 'Please wait for high-accuracy fix.' });
+
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        const acc = pos.coords.accuracy;
         setLatitude(String(pos.coords.latitude.toFixed(6)));
         setLongitude(String(pos.coords.longitude.toFixed(6)));
-        toast.success('Location captured');
+
+        if (acc > 500) {
+          toast.warning(`Low Accuracy: ±${Math.round(acc)}m`, {
+            description: 'Location detected via IP/WiFi (inaccurate). Please verify coordinates manually or use a phone.'
+          });
+        } else {
+          toast.success(`Location captured (±${Math.round(acc)}m)`);
+        }
       },
-      () => toast.error('Unable to fetch location'),
-      { enableHighAccuracy: true, timeout: 5000 }
+      (err) => {
+        console.error(err);
+        toast.error('Unable to fetch location. Please enter manually.');
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
 
